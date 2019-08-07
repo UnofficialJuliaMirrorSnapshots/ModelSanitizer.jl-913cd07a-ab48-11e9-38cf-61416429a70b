@@ -1,13 +1,16 @@
 import PkgBenchmark
 
-function _get_travis_bors_git_commit_message(a::AbstractDict = ENV)::String
+# include("./utils/github/github_api_unauthenticated.jl")
+# include("./utils/github/github_api_authenticated.jl")
+
+function get_travis_git_commit_message(a::AbstractDict = ENV)::String
     result::String = strip(get(a, "TRAVIS_COMMIT_MESSAGE", ""))
     return result
 end
 
-_single_line_travis_bors_allow_regressions(x::AbstractString) = _single_line_travis_bors_allow_regressions(convert(String, x))
+_single_line_travis_allow_regressions(x::AbstractString) = _single_line_travis_allow_regressions(convert(String, x))
 
-function _single_line_travis_bors_allow_regressions(line::String)::Tuple{Bool, Bool}
+function _single_line_travis_allow_regressions(line::String)::Tuple{Bool, Bool}
     _line::String = strip(line)
     _regex_allow_onlytime_regressions = r"^\d*: \[ALLOW_TIME_REGRESSIONS\]"
     _regex_allow_onlymemory_regressions = r"^\d*: \[ALLOW_MEMORY_REGRESSIONS\]"
@@ -20,9 +23,11 @@ function _single_line_travis_bors_allow_regressions(line::String)::Tuple{Bool, B
     return allow_time_regressions, allow_memory_regressions
 end
 
-_travis_bors_allow_regressions(x::AbstractString) = _travis_bors_allow_regressions(convert(String, x))
+travis_allow_regressions(x::AbstractString) = travis_allow_regressions(convert(String, x))
 
-function _travis_bors_allow_regressions(commit_message::String)::Tuple{Bool, Bool}
+_all_and_notempty(x) = !isempty(x) && all(x)
+
+function travis_allow_regressions(commit_message::String)::Tuple{Bool, Bool}
     lines::Vector{String} = split(strip(commit_message), "\n")
     vector_allow_time_regressions::Vector{Bool} = Vector{Bool}(undef, 0)
     vector_allow_memory_regressions::Vector{Bool} = Vector{Bool}(undef, 0)
@@ -33,27 +38,30 @@ function _travis_bors_allow_regressions(commit_message::String)::Tuple{Bool, Boo
         elseif startswith(_line, "Try #")
         elseif startswith(_line, "Co-authored-by:")
         else
-            line_allow_time_regressions, line_allow_memory_regressions = _single_line_travis_bors_allow_regressions(_line)
+            line_allow_time_regressions, line_allow_memory_regressions = _single_line_travis_allow_regressions(_line)
             push!(vector_allow_time_regressions, line_allow_time_regressions)
             push!(vector_allow_memory_regressions, line_allow_memory_regressions)
         end
     end
-    if isempty(vector_allow_time_regressions)
-        allow_time_regressions = false
-    else
-        allow_time_regressions = all(vector_allow_time_regressions)
-    end
-    if isempty(vector_allow_memory_regressions)
-        allow_memory_regressions = false
-    else
-        allow_memory_regressions = all(vector_allow_memory_regressions)
-    end
+    allow_time_regressions = _all_and_notempty(vector_allow_time_regressions)
+    allow_memory_regressions = _all_and_notempty(vector_allow_memory_regressions)
     return allow_time_regressions, allow_memory_regressions
 end
 
-function run_benchmarks(baseline::Union{String, PkgBenchmark.BenchmarkConfig} = "master")
-    allow_time_regressions, allow_memory_regressions = _travis_bors_allow_regressions(_get_travis_bors_git_commit_message())
-    @info("Allow time regressions: $(allow_time_regressions). Allow memory regressions: $(allow_memory_regressions).")
+function run_benchmarks(
+        ;
+        target::Union{String, PkgBenchmark.BenchmarkConfig} = "HEAD",
+        baseline::Union{String, PkgBenchmark.BenchmarkConfig} = "master",
+        )
+    # allow_time_regressions, allow_memory_regressions = travis_allow_regressions(get_github_pull_request_title_unauthenticated())
+    # allow_time_regressions, allow_memory_regressions = travis_allow_regressions(get_github_pull_request_title_authenticated())
+
+    allow_time_regressions, allow_memory_regressions = travis_allow_regressions(get_travis_git_commit_message())
+
+    @info("Allow time regressions: $(allow_time_regressions)")
+    @info("Allow memory regressions: $(allow_memory_regressions)")
+    @info("Target: $(target)")
+    @info("Baseline: $(baseline)")
 
     project_root = dirname(dirname(@__FILE__))
 
@@ -66,7 +74,7 @@ function run_benchmarks(baseline::Union{String, PkgBenchmark.BenchmarkConfig} = 
     include(proof_of_concept_linearmodel)
     include(proof_of_concept_mlj)
 
-    judgement = PkgBenchmark.judge("ModelSanitizer", "HEAD", baseline)
+    judgement = PkgBenchmark.judge("ModelSanitizer", target, baseline)
 
     this_judgement_was_failed_for_time = false
     this_judgement_was_failed_for_memory = false
@@ -94,23 +102,31 @@ function run_benchmarks(baseline::Union{String, PkgBenchmark.BenchmarkConfig} = 
     end
 
     if this_judgement_was_failed_for_time || this_judgement_was_failed_for_memory
-        error(
-            string(
-                "FAILURE: One or more fatal performance regressions were detected.\n",
-                "To ignore only time regressions, begin your pull request title with ",
-                "\"",
-                "[ALLOW_TIME_REGRESSIONS]",
-                "\".\n",
-                "To ignore only memory regressions, begin your pull request title with ",
-                "\"",
-                "[ALLOW_MEMORY_REGRESSIONS]",
-                "\".\n",
-                "To ignore both time and memory regressions, begin your pull request title with ",
-                "\"",
-                "[ALLOW_TIME+MEMORY_REGRESSIONS]",
-                "\".\n",
-                )
-            )
+        error_message = string("FAILURE: ",
+                               "One or more fatal performance ",
+                               "performance regressions were detected.\n",
+                               "To ignore only time regressions, ",
+                               "begin your pull request title with ",
+                               "\"",
+                               "[ALLOW_TIME_REGRESSIONS]",
+                               "\" (without the quotation marks).\n",
+                               "To ignore only memory regressions, ",
+                               "begin your pull request title with ",
+                               "\"",
+                               "[ALLOW_MEMORY_REGRESSIONS]",
+                               "\".\n",
+                               "To ignore both time and memory regressions, ",
+                               "begin your pull request title with ",
+                               "\"",
+                               "[ALLOW_TIME+MEMORY_REGRESSIONS]",
+                               "\".\n")
+        travis_branch = lowercase(strip(get(ENV, "TRAVIS_BRANCH", "")))
+        travis_pull_request = lowercase(strip(get(ENV, "TRAVIS_PULL_REQUEST", "")))
+        if travis_branch == "trying" && travis_pull_request == "false"
+            @error(error_message)
+        else
+            error(error_message)
+        end
     else
         @info("SUCCESS: No fatal performance regressions were detected.")
     end
