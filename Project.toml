@@ -1,7 +1,10 @@
 name = "ModelSanitizer"
 uuid = "913cd07a-ab48-11e9-38cf-61416429a70b"
 authors = ["Dilum Aluthge <dilum@aluthge.com>"]
-version = "0.3.0"
+version = "0.4.0-DEV"
+
+[deps]
+Requires = "ae029012-a4dd-5104-9daa-d747884805df"
 
 [compat]
 BenchmarkTools = "^0.4.2"
@@ -12,6 +15,7 @@ MLJBase = "=0.2.3"
 MLJModels = "=0.2.5"
 MultivariateStats = "=0.6.0"
 PkgBenchmark = "^0.2.2"
+Requires = "^0.5.2"
 StatsBase = "=0.31.0"
 StatsModels = "=0.6.2"
 TimerOutputs = "^0.5.0"

@@ -1,11 +1,11 @@
 module ModelSanitizer
 
+import Requires
+
 export sanitize!
 export Model
 export Data
 export ForceSanitize
-
-include("../ext/Requires/src/Requires.jl")
 
 include("types.jl")
 

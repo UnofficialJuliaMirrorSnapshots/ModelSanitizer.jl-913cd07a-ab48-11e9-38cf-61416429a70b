@@ -1,0 +1,17 @@
+docs_url:         https://github.com/bcbi/ModelSanitizer.jl
+
+doi:              "10.5281/zenodo.3361518"
+
+maintainers:
+    - name: Dilum Aluthge
+      github_user: DilumAluthge
+
+repo:             ModelSanitizer.jl
+
+repo_url:         https://github.com/bcbi/ModelSanitizer.jl
+
+site_description: Remove potentially sensitive data from trained machine learning models
+
+site_name:        ModelSanitizer.jl
+
+type:             software

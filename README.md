@@ -2,6 +2,15 @@
 
 <p>
 <a
+href="https://doi.org/10.5281/zenodo.3361518">
+<img
+src="https://zenodo.org/badge/DOI/10.5281/zenodo.3361518.svg"
+alt="DOI">
+</a>
+</p>
+
+<p>
+<a
 href="https://app.bors.tech/repositories/19368">
 <img
 src="https://bors.tech/images/badge_small.svg"

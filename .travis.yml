@@ -6,10 +6,6 @@ branches:
         - /^release\/.*$/ # release branches
         - /^v[0-9]+\.[0-9]+\.[0-9]+$/ # version tags
 
-env:
-    global:
-        - RUN_BENCHMARK_STAGE="true"
-
 git:
     depth: 99999999
 
@@ -74,8 +70,7 @@ jobs:
               - INLINE="yes"
               - JULIA_DEBUG="all"
           script: ./ci/travis/script.sh
-        - if: env(RUN_BENCHMARK_STAGE) != "false"
-          stage: "Benchmark"
+        - stage: "Benchmark"
           os: linux
           julia: 1.1
           env:
