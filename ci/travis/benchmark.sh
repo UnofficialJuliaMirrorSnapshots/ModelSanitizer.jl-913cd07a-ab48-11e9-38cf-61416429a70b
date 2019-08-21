@@ -31,10 +31,32 @@ julia --project=. -e '
             Pkg.PackageSpec(name="StatsBase", version="0.31.0"),
             Pkg.PackageSpec(name="StatsModels", version="0.6.2"),
             Pkg.PackageSpec(name="TimerOutputs", version="0.5.0"),
+            Pkg.PackageSpec(name="GitHub", version="5.1.1"),
             ]
         )
     '
 
-git fetch origin master:master
+export CURRENT_GIT_BRANCH="$(git rev-parse --symbolic-full-name --abbrev-ref HEAD)"
+
+echo "$CURRENT_GIT_BRANCH"
+
+if [ "$CURRENT_GIT_BRANCH" == "master" ]; then
+    echo "I AM on master"
+else
+    echo "I am NOT on master"
+    git fetch origin master:master
+fi
+
+if [ "$CURRENT_GIT_BRANCH" == "staging" ]; then
+    echo "I AM on staging"
+else
+    echo "I am NOT on staging"
+fi
+
+if [ "$CURRENT_GIT_BRANCH" == "trying" ]; then
+    echo "I AM on trying"
+else
+    echo "I am NOT on trying"
+fi
 
 julia --project=. $TRAVIS_BUILD_DIR/benchmark/run.jl
