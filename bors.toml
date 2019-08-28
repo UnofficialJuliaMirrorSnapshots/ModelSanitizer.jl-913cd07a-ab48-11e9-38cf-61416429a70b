@@ -5,10 +5,10 @@ delete_merged_branches = true
 status = [
     "codecov/patch",
     # "codecov/project",
-    "continuous-integration/travis-ci/push",
+    "Travis CI - Branch",
 ]
 
-timeout_sec = 576000
+timeout_sec = 10800
 
 [committer]
 name = "BCBI Bot"
