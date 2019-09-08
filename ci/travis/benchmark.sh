@@ -27,7 +27,7 @@ julia --project=. -e '
             Pkg.PackageSpec(name="MLJBase", version="0.2.3"),
             Pkg.PackageSpec(name="MLJModels", version="0.2.5"),
             Pkg.PackageSpec(name="MultivariateStats", version="0.6.0"),
-            Pkg.PackageSpec(name="PkgBenchmark", version="0.2.2"),
+            Pkg.PackageSpec(name="PkgBenchmark", version="0.2.3"),
             Pkg.PackageSpec(name="StatsBase", version="0.31.0"),
             Pkg.PackageSpec(name="StatsModels", version="0.6.2"),
             Pkg.PackageSpec(name="TimerOutputs", version="0.5.0"),

@@ -1,5 +1,6 @@
 import LibGit2
 import PkgBenchmark
+import Statistics
 
 # include("./utils/github/_httpjson_github_api_unauthenticated.jl")
 # include("./utils/github/_httpjson_github_api_authenticated.jl")
@@ -80,15 +81,32 @@ function travis_allow_regressions(commit_message::String)::Tuple{Bool, Bool}
     return allow_time_regressions, allow_memory_regressions
 end
 
-function pkgbenchmark_judge(pkg_name, target, baseline)
-    judgement = PkgBenchmark.judge(pkg_name, target, baseline)
-    return judgement
+function benchmarkpkg_do_not_ignore_errors(pkg_name, git_identifier)
+    result = PkgBenchmark.benchmarkpkg(pkg_name, git_identifier; retune = true)
+    return result
 end
 
-function pkgbenchmark_judge_ignore_errors(pkg_name, target, baseline)
+function benchmarkpkg_ignore_errors(pkg_name, git_identifier)
     try
-        judgement = PkgBenchmark.judge(pkg_name, target, baseline)
-        return judgement
+        result = PkgBenchmark.benchmarkpkg(pkg_name, git_identifier; retune = true)
+        return result
+    catch ex
+        showerror(stderr, ex)
+        Base.show_backtrace(stderr, catch_backtrace())
+        println(stderr)
+        return AllowedToIgnoreThisError()
+    end
+end
+
+function judge_do_not_ignore_errors(target_run, baseline_run, f)
+    result = PkgBenchmark.judge(target_run, baseline_run, f)
+    return result
+end
+
+function judge_ignore_errors(target_run, baseline_run, f)
+    try
+        result = PkgBenchmark.judge(target_run, baseline_run, f)
+        return result
     catch ex
         showerror(stderr, ex)
         Base.show_backtrace(stderr, catch_backtrace())
@@ -146,66 +164,92 @@ function _run_benchmarks(
     include(proof_of_concept_mlj)
 
     if ignore_errors
-        judgement = pkgbenchmark_judge_ignore_errors("ModelSanitizer", target, baseline)
+        results_of_run_on_target = benchmarkpkg_ignore_errors("ModelSanitizer", target)
+        results_of_run_on_baseline = benchmarkpkg_ignore_errors("ModelSanitizer", baseline)
     else
-        judgement = pkgbenchmark_judge("ModelSanitizer", target, baseline)
+        results_of_run_on_target = benchmarkpkg_do_not_ignore_errors("ModelSanitizer", target)
+        results_of_run_on_baseline = benchmarkpkg_do_not_ignore_errors("ModelSanitizer", baseline)
     end
-
-    if judgement isa AllowedToIgnoreThisError
+    if ( ignore_errors ) && ( (results_of_run_on_target isa AllowedToIgnoreThisError) || (results_of_run_on_baseline isa AllowedToIgnoreThisError) )
+        @error("One or more errors occurred that prevented us from continuing.")
     else
-        this_judgement_was_failed_for_time = false
-        this_judgement_was_failed_for_memory = false
-
-        for i in ["integration-tests"]
-            for j in ["proof-of-concept-dataframes", "proof-of-concept-linearmodel", "proof-of-concept-mlj"]
-                trial_judgement = PkgBenchmark.benchmarkgroup(judgement).data[i].data[j]
-                if PkgBenchmark.time(trial_judgement) == :regression
-                    if allow_time_regressions
-                        @error("Time regression (allowed) detected in $(i)/$(j)", trial_judgement)
-                    else
-                        this_judgement_was_failed_for_time = true
-                        @error("Time regression detected in $(i)/$(j)", trial_judgement)
-                    end
-                end
-                if PkgBenchmark.memory(trial_judgement) == :regression
-                    if allow_memory_regressions
-                        @error("Memory regression (allowed) detected in $(i)/$(j)", trial_judgement)
-                    else
-                        this_judgement_was_failed_for_memory = true
-                        @error("Memory regression regression detected in $(i)/$(j)", trial_judgement)
-                    end
-                end
-            end
-        end
-
-        if this_judgement_was_failed_for_time || this_judgement_was_failed_for_memory
-            error_message = string("FAILURE: ",
-                                   "One or more fatal performance ",
-                                   "performance regressions were detected.\n",
-                                   "To ignore only time regressions, ",
-                                   "begin your pull request title with ",
-                                   "\"",
-                                   "[ALLOW_TIME_REGRESSIONS]",
-                                   "\" (without the quotation marks).\n",
-                                   "To ignore only memory regressions, ",
-                                   "begin your pull request title with ",
-                                   "\"",
-                                   "[ALLOW_MEMORY_REGRESSIONS]",
-                                   "\".\n",
-                                   "To ignore both time and memory regressions, ",
-                                   "begin your pull request title with ",
-                                   "\"",
-                                   "[ALLOW_TIME+MEMORY_REGRESSIONS]",
-                                   "\".\n")
-            travis_branch = lowercase(strip(get(ENV, "TRAVIS_BRANCH", "")))
-            travis_pull_request = lowercase(strip(get(ENV, "TRAVIS_PULL_REQUEST", "")))
-            if travis_branch == "trying" && travis_pull_request == "false"
-                @error(error_message)
-            else
-                error(error_message)
-            end
+        if ignore_errors
+            judgement_minimum = judge_ignore_errors(results_of_run_on_target, results_of_run_on_baseline, minimum)
+            judgement_median = judge_ignore_errors(results_of_run_on_target, results_of_run_on_baseline, Statistics.median)
         else
-            @info("SUCCESS: No fatal performance regressions were detected.")
+            judgement_minimum = judge_do_not_ignore_errors(results_of_run_on_target, results_of_run_on_baseline, minimum)
+            judgement_median = judge_do_not_ignore_errors(results_of_run_on_target, results_of_run_on_baseline, Statistics.median)
+        end
+        if ( ignore_errors ) && ( (judgement_minimum isa AllowedToIgnoreThisError) || (judgement_median isa AllowedToIgnoreThisError) )
+            @error("One or more errors occurred that prevented us from continuing.")
+        else
+            println(stdout)
+            println(stdout, "<!--- Package: `ModelSanitizer`. Target: `$(target)`. Baseline: `$(baseline)`. Estimator function: `f = minimum`. Invariant rows are not shown. -->")
+            println(stdout, "<!--- BEGIN MARKDOWN -->")
+            PkgBenchmark.export_markdown(stdout, judgement_minimum; export_invariants = true)
+            println(stdout)
+            println(stdout, "<!--- END MARKDOWN -->")
+            println(stdout, "<!--- Package: `ModelSanitizer`. Target: `$(target)`. Baseline: `$(baseline)`. Estimator function: `f = median`. Invariant rows are not shown. -->")
+            println(stdout, "<!--- BEGIN MARKDOWN -->")
+            PkgBenchmark.export_markdown(stdout, judgement_median; export_invariants = true)
+            println(stdout)
+            println(stdout, "<!--- END MARKDOWN -->")
+            println(stdout)
+
+            this_judgement_was_failed_for_time = false
+            this_judgement_was_failed_for_memory = false
+
+            for i in ["integration-tests"]
+                for j in ["proof-of-concept-dataframes", "proof-of-concept-linearmodel", "proof-of-concept-mlj"]
+                    trial_judgement = PkgBenchmark.benchmarkgroup(judgement_minimum).data[i].data[j]
+                    if PkgBenchmark.time(trial_judgement) == :regression
+                        if allow_time_regressions
+                            @error("Time regression (allowed) detected in $(i)/$(j)", trial_judgement)
+                        else
+                            this_judgement_was_failed_for_time = true
+                            @error("Time regression detected in $(i)/$(j)", trial_judgement)
+                        end
+                    end
+                    if PkgBenchmark.memory(trial_judgement) == :regression
+                        if allow_memory_regressions
+                            @error("Memory regression (allowed) detected in $(i)/$(j)", trial_judgement)
+                        else
+                            this_judgement_was_failed_for_memory = true
+                            @error("Memory regression regression detected in $(i)/$(j)", trial_judgement)
+                        end
+                    end
+                end
+            end
+
+            if this_judgement_was_failed_for_time || this_judgement_was_failed_for_memory
+                error_message = string("FAILURE: ",
+                                       "One or more fatal performance ",
+                                       "performance regressions were detected.\n",
+                                       "To ignore only time regressions, ",
+                                       "begin your pull request title with ",
+                                       "\"",
+                                       "[ALLOW_TIME_REGRESSIONS]",
+                                       "\" (without the quotation marks).\n",
+                                       "To ignore only memory regressions, ",
+                                       "begin your pull request title with ",
+                                       "\"",
+                                       "[ALLOW_MEMORY_REGRESSIONS]",
+                                       "\".\n",
+                                       "To ignore both time and memory regressions, ",
+                                       "begin your pull request title with ",
+                                       "\"",
+                                       "[ALLOW_TIME+MEMORY_REGRESSIONS]",
+                                       "\".\n")
+                travis_branch = lowercase(strip(get(ENV, "TRAVIS_BRANCH", "")))
+                travis_pull_request = lowercase(strip(get(ENV, "TRAVIS_PULL_REQUEST", "")))
+                if travis_branch == "trying" && travis_pull_request == "false"
+                    @error(error_message)
+                else
+                    error(error_message)
+                end
+            else
+                @info("SUCCESS: No fatal performance regressions were detected.")
+            end
         end
     end
     return nothing
